@@ -16,6 +16,8 @@
 
 #![deny(clippy::pedantic)]
 
+use std::io::{self, Write};
+
 use clap::Parser;
 use url::Url;
 
@@ -46,9 +48,12 @@ const LATEST: &str = "latest";
 fn parse_registry_arg(host: &str) -> Result<Url, DredgeError> {
     log::trace!("make_registry_url(host: {host})");
 
-    Url::parse(host)
-        .or_else(|_| Url::parse(&format!("https://{host}")))
-        .or(Err(DredgeError::RegistryUrlError(host.to_string())))
+    let mut host = String::from(host);
+    if !host.starts_with("http://") && !host.starts_with("https://") {
+        host = format!("https://{host}");
+    }
+
+    Url::parse(&host).or(Err(DredgeError::RegistryUrlError(host.to_string())))
 }
 
 #[async_std::main]
@@ -63,18 +68,93 @@ async fn main() -> Result<(), DredgeError> {
     let registry_url: Url = parse_registry_arg(&args.registry)?;
 
     // -- Dispatch control to the appropriate command handler.
+    let mut buf: Vec<u8> = Vec::new();
     match args.command {
-        Commands::Catalog => commands::catalog_handler(&registry_url).await?,
-        Commands::Tags { name } => commands::tags_handler(&registry_url, &name).await?,
+        Commands::Catalog => commands::catalog_handler(&mut buf, &registry_url).await?,
+        Commands::Tags { name } => commands::tags_handler(&mut buf, &registry_url, &name).await?,
         Commands::Show { image, tag } => {
-            commands::show_handler(&registry_url, &image, &tag.unwrap_or(LATEST.to_string()))
-                .await?;
+            commands::show_handler(
+                &mut buf,
+                &registry_url,
+                &image,
+                &tag.unwrap_or(LATEST.to_string()),
+            )
+            .await?;
         }
         Commands::Delete { image, tag } => {
-            commands::delete_handler(&registry_url, &image, &tag).await?;
+            commands::delete_handler(&mut buf, &registry_url, &image, &tag).await?;
         }
-        Commands::Check => commands::check_handler(&registry_url).await?,
+        Commands::Check => commands::check_handler(&mut buf, &registry_url).await?,
     }
 
+    io::stdout().write_all(&buf)?;
+
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test that given a valid URL in the <REGISTRY> argument, we return the
+    /// same URL from `parse_registry_arg()`
+    #[test]
+    fn test_parse_valid_url_registry_arg() {
+        let host = "https://example.com/registry";
+        let result = parse_registry_arg(host);
+
+        // Check if the result is Ok and contains the expected URL
+        assert!(result.is_ok());
+        let url = result.unwrap();
+        assert_eq!(url.scheme(), "https");
+        assert_eq!(url.host_str(), Some("example.com"));
+        assert_eq!(url.path(), "/registry");
+    }
+
+    /// Test that given only an FQDN for a specific host in the <REGISTRY>
+    /// argument, we return an HTTPS url with that FQDN as the host.
+    #[test]
+    fn test_parse_valid_fqdn_registry_arg() {
+        let host = "example.com";
+        let result = parse_registry_arg(host);
+
+        // Check if the result is Ok and contains the expected URL
+        assert!(result.is_ok());
+        let url = result.unwrap();
+        assert_eq!(url.scheme(), "https");
+        assert_eq!(url.host_str(), Some("example.com"));
+        assert_eq!(url.path(), "/");
+    }
+
+    /// Test that given an FQDN with port for a specific host in the <REGISTRY>
+    /// argument, we return an HTTPS url with that FQDN as the host and the
+    /// given port as the parsed port number.
+    #[test]
+    fn test_parse_valid_fqdn_registry_arg_alt_port() {
+        let host = "example.com:5123";
+        let result = parse_registry_arg(host);
+
+        // Check if the result is Ok and contains the expected URL
+        assert!(result.is_ok());
+        let url = result.unwrap();
+        assert_eq!(url.scheme(), "https");
+        assert_eq!(url.host_str(), Some("example.com"));
+        assert_eq!(url.port(), Some(5123));
+        assert_eq!(url.path(), "/");
+    }
+
+    /// Test that given an arbitrary string which can not be parsed as a valid
+    /// URL or FQDN, we return the `RegistryUrlError` variant.
+    #[test]
+    fn test_parse_invalid_registry_arg() {
+        let host = "///"; // This is not a valid URL
+        let result = parse_registry_arg(host);
+
+        // Check if result is Err and matches the expected error variant.
+        assert!(result.is_err());
+        match result {
+            Err(DredgeError::RegistryUrlError(_)) => {} // Expected error variant,
+            _ => panic!("Expected RegistryUrlError, got a different error"),
+        }
+    }
 }

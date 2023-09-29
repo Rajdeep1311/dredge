@@ -29,6 +29,9 @@ pub enum DredgeError {
     /// An error building the registry URL
     #[error("Error determining registry URL from {0}")]
     RegistryUrlError(String),
+
+    #[error(transparent)]
+    IOError(#[from] std::io::Error),
 }
 
 /// An error related to the communication with the registry API.
@@ -56,6 +59,12 @@ pub enum ApiError {
 
     #[error("Resource not found")]
     NotFound,
+
+    #[error(transparent)]
+    IOError(#[from] std::io::Error),
+
+    #[error(transparent)]
+    SerializerError(#[from] serde_yaml::Error),
 }
 
 impl From<reqwest::header::ToStrError> for ApiError {

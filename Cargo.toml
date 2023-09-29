@@ -2,6 +2,21 @@
 name = "dredge"
 version = "0.1.0"
 edition = "2021"
+authors = ["Anthony Oteri"]
+description = "A Command Line tool for interracting with the Docker Registry API"
+readme = "README.md"
+repository = "https://github.com/anthonyoteri/dredge"
+rust-version = "1.72"
+license-file = "LICENSE"
+keywords = [
+    "docker",
+    "registry",
+    "cli",
+]
+categories = [
+    "command-line-utilities",
+    "api-bindings",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,11 +25,16 @@ async-std = { version = "1.12.0", features = ["async-attributes", "attributes", 
 clap = { version = "4.4.3", features = ["derive", "env", "wrap_help"] }
 femme = "2.2.1"
 http = "0.2.9"
+indoc = "2.0.4"
 log = "0.4.20"
 reqwest = { version = "0.11.20", features = ["json", "gzip", "multipart", "native-tls-vendored"] }
 serde = { version = "1.0.188", features = ["derive"] }
 serde_toml = "0.0.1"
+serde_yaml = "0.9.25"
 thiserror = "1.0.48"
 toml = "0.8.0"
 url = { version = "2.4.1", features = ["serde"] }
 xdg = "2.5.2"
+
+[dev-dependencies]
+mockito = "1.2.0"
